@@ -3,8 +3,6 @@ import type {
   Comment,
   Dashboard,
   Label,
-  Member,
-  MemberRole,
   Project,
   ProjectPriority,
   ProjectStatus,
@@ -12,8 +10,7 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskType,
-  TokenResponse,
-  User,
+  TeamMember,
 } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
@@ -26,22 +23,11 @@ class ApiError extends Error {
   }
 }
 
-function getToken(): string | null {
-  return localStorage.getItem('atlas_token')
-}
-
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem('atlas_token', token)
-  else localStorage.removeItem('atlas_token')
-}
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {})
   if (!headers.has('Content-Type') && options.body) {
     headers.set('Content-Type', 'application/json')
   }
-  const token = getToken()
-  if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
   if (!res.ok) {
@@ -62,21 +48,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  register: (body: {
-    email: string
-    full_name: string
-    password: string
-    job_title?: string
-  }) => request<TokenResponse>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
-
-  login: (body: { email: string; password: string }) =>
-    request<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
-
-  me: () => request<User>('/auth/me'),
-
-  users: (q?: string) => request<User[]>(`/auth/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
-
   dashboard: () => request<Dashboard>('/dashboard'),
+
+  teamMembers: () => request<TeamMember[]>('/team-members'),
 
   projects: (status?: string) =>
     request<Project[]>(`/projects${status ? `?status=${status}` : ''}`),
@@ -99,19 +73,6 @@ export const api = {
 
   deleteProject: (id: number) =>
     request<{ detail: string }>(`/projects/${id}`, { method: 'DELETE' }),
-
-  members: (projectId: number) => request<Member[]>(`/projects/${projectId}/members`),
-
-  addMember: (projectId: number, body: { email: string; role: MemberRole }) =>
-    request<Member>(`/projects/${projectId}/members`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  removeMember: (projectId: number, memberId: number) =>
-    request<{ detail: string }>(`/projects/${projectId}/members/${memberId}`, {
-      method: 'DELETE',
-    }),
 
   labels: (projectId: number) => request<Label[]>(`/projects/${projectId}/labels`),
 
@@ -156,10 +117,10 @@ export const api = {
 
   comments: (taskId: number) => request<Comment[]>(`/tasks/${taskId}/comments`),
 
-  addComment: (taskId: number, body: string) =>
+  addComment: (taskId: number, body: string, authorName = 'Anonymous') =>
     request<Comment>(`/tasks/${taskId}/comments`, {
       method: 'POST',
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, author_name: authorName }),
     }),
 }
 

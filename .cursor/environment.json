@@ -1,0 +1,24 @@
+{
+  "name": "Atlas PM",
+  "install": "./scripts/cloud-agent-install.sh",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+    },
+    {
+      "name": "web",
+      "command": "cd frontend && npm run dev"
+    }
+  ],
+  "ports": [
+    {
+      "port": 8000,
+      "name": "API"
+    },
+    {
+      "port": 5173,
+      "name": "Web"
+    }
+  ]
+}

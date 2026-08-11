@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
-import { Avatar, EmptyState, StatusBadge, formatDate, priorityKind, statusKind } from '../components/ui'
+import { Alert, Badge, EmptyState, PageLoader, btnPrimary, formatDate } from '../components/ui'
 import type { Dashboard } from '../types'
-import { useAuth } from '../context/AuthContext'
 
 export function DashboardPage() {
-  const { user } = useAuth()
   const [data, setData] = useState<Dashboard | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -28,116 +26,131 @@ export function DashboardPage() {
     }
   }, [])
 
-  if (loading) return <div className="page-loading">Loading dashboard…</div>
-  if (error) return <div className="alert">{error}</div>
+  if (loading) return <PageLoader label="Loading dashboard…" />
+  if (error) return <div className="p-8"><Alert>{error}</Alert></div>
   if (!data) return null
 
   return (
-    <div className="page">
-      <header className="page-header">
+    <div className="p-8">
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">Workspace</p>
-          <h1>Good day, {user?.full_name.split(' ')[0]}</h1>
-          <p className="lede">Track delivery across your projects without drowning in noise.</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-teal-600">Workspace</p>
+          <h1 className="mt-1 text-3xl font-bold text-slate-900">Dashboard</h1>
+          <p className="mt-2 text-slate-600">Track projects and open work at a glance.</p>
         </div>
-        <Link className="btn btn-primary" to="/projects">
+        <Link to="/projects" className={btnPrimary}>
           View projects
         </Link>
       </header>
 
-      <section className="stat-grid">
-        <article className="stat">
-          <span>Projects</span>
-          <strong>{data.project_count}</strong>
-        </article>
-        <article className="stat">
-          <span>Active</span>
-          <strong>{data.active_projects}</strong>
-        </article>
-        <article className="stat">
-          <span>My open tasks</span>
-          <strong>{data.my_open_tasks}</strong>
-        </article>
-        <article className="stat">
-          <span>Overdue</span>
-          <strong className={data.overdue_tasks ? 'danger-text' : ''}>{data.overdue_tasks}</strong>
-        </article>
+      <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'Projects', value: data.project_count },
+          { label: 'Active', value: data.active_projects },
+          { label: 'Open tasks', value: data.open_tasks },
+          { label: 'Overdue', value: data.overdue_tasks, danger: data.overdue_tasks > 0 },
+        ].map((stat) => (
+          <article
+            key={stat.label}
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <p className="text-sm text-slate-500">{stat.label}</p>
+            <p
+              className={`mt-1 text-3xl font-bold ${stat.danger ? 'text-rose-600' : 'text-slate-900'}`}
+            >
+              {stat.value}
+            </p>
+          </article>
+        ))}
       </section>
 
-      <div className="split">
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Recent projects</h2>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="font-semibold text-slate-900">Recent projects</h2>
           </div>
-          {data.recent_projects.length === 0 ? (
-            <EmptyState title="No projects yet" body="Create your first project to start tracking work." />
-          ) : (
-            <ul className="project-list">
-              {data.recent_projects.map((p) => (
-                <li key={p.id}>
-                  <Link to={`/projects/${p.id}`}>
-                    <div className="project-key">{p.key}</div>
-                    <div className="project-meta">
-                      <strong>{p.name}</strong>
-                      <span>
-                        {p.stats?.completion_percent ?? 0}% complete · {p.stats?.member_count ?? 0} members
+          <div className="p-5">
+            {data.recent_projects.length === 0 ? (
+              <EmptyState title="No projects yet" body="Create your first project to get started." />
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {data.recent_projects.map((p) => (
+                  <li key={p.id}>
+                    <Link
+                      to={`/projects/${p.id}`}
+                      className="flex items-center gap-4 py-3 transition-colors hover:bg-slate-50 -mx-2 px-2 rounded-lg"
+                    >
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-100 text-sm font-bold text-teal-800">
+                        {p.key}
                       </span>
-                    </div>
-                    <StatusBadge value={p.status} kind={statusKind(p.status)} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900">{p.name}</p>
+                        <p className="text-sm text-slate-500">
+                          {p.stats?.completion_percent ?? 0}% complete
+                        </p>
+                      </div>
+                      <Badge value={p.status} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>My tasks</h2>
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="font-semibold text-slate-900">Open tasks</h2>
           </div>
-          {data.my_tasks.length === 0 ? (
-            <EmptyState title="Inbox clear" body="Nothing assigned to you right now." />
-          ) : (
-            <ul className="task-list">
-              {data.my_tasks.map((t) => (
-                <li key={t.id}>
-                  <Link to={`/tasks/${t.id}`}>
-                    <span className="issue-key">{t.issue_key}</span>
-                    <strong>{t.title}</strong>
-                    <div className="task-list-meta">
-                      <StatusBadge value={t.status} kind={statusKind(t.status)} />
-                      <StatusBadge value={t.priority} kind={priorityKind(t.priority)} />
-                      <span className="muted">{formatDate(t.due_date)}</span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="p-5">
+            {data.recent_tasks.length === 0 ? (
+              <EmptyState title="All clear" body="No open tasks right now." />
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {data.recent_tasks.map((t) => (
+                  <li key={t.id}>
+                    <Link
+                      to={`/tasks/${t.id}`}
+                      className="block py-3 transition-colors hover:bg-slate-50 -mx-2 px-2 rounded-lg"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-teal-700">{t.issue_key}</span>
+                        <Badge value={t.status} />
+                      </div>
+                      <p className="mt-1 font-medium text-slate-900">{t.title}</p>
+                      <p className="text-sm text-slate-500">Due {formatDate(t.due_date)}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
       </div>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Recent activity</h2>
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="font-semibold text-slate-900">Recent activity</h2>
         </div>
-        {data.recent_activity.length === 0 ? (
-          <EmptyState title="Quiet so far" body="Project activity will show up here." />
-        ) : (
-          <ul className="activity-list">
-            {data.recent_activity.map((a) => (
-              <li key={a.id}>
-                {a.actor ? <Avatar user={a.actor} size={28} /> : <span className="avatar ghost" />}
-                <div>
-                  <p>{a.message}</p>
-                  <span className="muted">
-                    {a.actor?.full_name || 'System'} · {formatDate(a.created_at)}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="p-5">
+          {data.recent_activity.length === 0 ? (
+            <EmptyState title="Quiet so far" body="Activity will appear here." />
+          ) : (
+            <ul className="space-y-3">
+              {data.recent_activity.map((a) => (
+                <li key={a.id} className="flex gap-3 text-sm">
+                  <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-teal-500" />
+                  <div>
+                    <p className="text-slate-800">{a.message}</p>
+                    <p className="text-slate-500">
+                      {a.actor_name || 'System'} · {formatDate(a.created_at)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
     </div>
   )
