@@ -2,60 +2,22 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import (
-    MemberRole,
-    ProjectPriority,
-    ProjectStatus,
-    TaskPriority,
-    TaskStatus,
-    TaskType,
-)
+from app.models import ProjectPriority, ProjectStatus, TaskPriority, TaskStatus, TaskType
 
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ——— Users / Auth ———
-
-
-class UserCreate(BaseModel):
-    email: EmailStr
-    full_name: str = Field(min_length=2, max_length=120)
-    password: str = Field(min_length=8, max_length=128)
-    job_title: str | None = Field(default=None, max_length=120)
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class UserUpdate(BaseModel):
-    full_name: str | None = Field(default=None, min_length=2, max_length=120)
-    job_title: str | None = Field(default=None, max_length=120)
-    avatar_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
-
-
-class UserOut(ORMModel):
+class TeamMemberOut(ORMModel):
     id: int
-    email: EmailStr
     full_name: str
+    email: str | None
     avatar_color: str
     job_title: str | None
-    is_active: bool
     created_at: datetime
-
-
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserOut
-
-
-# ——— Labels ———
 
 
 class LabelCreate(BaseModel):
@@ -70,28 +32,6 @@ class LabelOut(ORMModel):
     project_id: int
 
 
-# ——— Members ———
-
-
-class MemberCreate(BaseModel):
-    email: EmailStr
-    role: MemberRole = MemberRole.member
-
-
-class MemberUpdate(BaseModel):
-    role: MemberRole
-
-
-class MemberOut(ORMModel):
-    id: int
-    role: MemberRole
-    user: UserOut
-    created_at: datetime
-
-
-# ——— Projects ———
-
-
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     key: str = Field(min_length=2, max_length=10, pattern=r"^[A-Z][A-Z0-9]+$")
@@ -101,7 +41,6 @@ class ProjectCreate(BaseModel):
     start_date: date | None = None
     target_date: date | None = None
     budget: int | None = Field(default=None, ge=0)
-    is_public: bool = False
 
 
 class ProjectUpdate(BaseModel):
@@ -112,7 +51,6 @@ class ProjectUpdate(BaseModel):
     start_date: date | None = None
     target_date: date | None = None
     budget: int | None = Field(default=None, ge=0)
-    is_public: bool | None = None
 
 
 class ProjectStats(BaseModel):
@@ -121,7 +59,6 @@ class ProjectStats(BaseModel):
     in_progress_tasks: int
     blocked_tasks: int
     completion_percent: float
-    member_count: int
 
 
 class ProjectOut(ORMModel):
@@ -134,16 +71,9 @@ class ProjectOut(ORMModel):
     start_date: date | None
     target_date: date | None
     budget: int | None
-    is_public: bool
-    owner_id: int
-    owner: UserOut
     created_at: datetime
     updated_at: datetime
     stats: ProjectStats | None = None
-    my_role: MemberRole | None = None
-
-
-# ——— Tasks ———
 
 
 class TaskCreate(BaseModel):
@@ -189,9 +119,7 @@ class TaskOut(ORMModel):
     due_date: date | None
     position: int
     assignee_id: int | None
-    reporter_id: int
-    assignee: UserOut | None = None
-    reporter: UserOut
+    assignee: TeamMemberOut | None = None
     labels: list[LabelOut] = Field(default_factory=list)
     comment_count: int = 0
     created_at: datetime
@@ -199,23 +127,18 @@ class TaskOut(ORMModel):
     issue_key: str | None = None
 
 
-# ——— Comments ———
-
-
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=5000)
+    author_name: str = Field(default="Anonymous", min_length=1, max_length=120)
 
 
 class CommentOut(ORMModel):
     id: int
     task_id: int
     body: str
-    author: UserOut
+    author_name: str
     created_at: datetime
     updated_at: datetime
-
-
-# ——— Activity / Dashboard ———
 
 
 class ActivityOut(ORMModel):
@@ -225,17 +148,17 @@ class ActivityOut(ORMModel):
     entity_type: str
     entity_id: int | None
     message: str
-    actor: UserOut | None
+    actor_name: str | None
     created_at: datetime
 
 
 class DashboardOut(BaseModel):
     project_count: int
     active_projects: int
-    my_open_tasks: int
+    open_tasks: int
     overdue_tasks: int
     recent_projects: list[ProjectOut]
-    my_tasks: list[TaskOut]
+    recent_tasks: list[TaskOut]
     recent_activity: list[ActivityOut]
 
 

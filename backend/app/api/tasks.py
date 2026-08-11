@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, require_project_access
+from app.api.deps import get_project_or_404
 from app.database import get_db
-from app.models import Activity, Label, MemberRole, Project, Task, User
+from app.models import Activity, Comment, Label, Task
 from app.schemas import (
     CommentCreate,
     CommentOut,
@@ -14,7 +14,6 @@ from app.schemas import (
     TaskOut,
     TaskUpdate,
 )
-from app.models import Comment
 
 router = APIRouter(tags=["tasks"])
 
@@ -32,7 +31,6 @@ def _load_task(db: Session, task_id: int) -> Task | None:
         db.query(Task)
         .options(
             joinedload(Task.assignee),
-            joinedload(Task.reporter),
             joinedload(Task.labels),
             joinedload(Task.comments),
             joinedload(Task.project),
@@ -45,7 +43,7 @@ def _load_task(db: Session, task_id: int) -> Task | None:
 def _log(
     db: Session,
     project_id: int,
-    actor_id: int | None,
+    actor_name: str | None,
     action: str,
     entity_type: str,
     entity_id: int | None,
@@ -54,7 +52,7 @@ def _log(
     db.add(
         Activity(
             project_id=project_id,
-            actor_id=actor_id,
+            actor_name=actor_name,
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -69,15 +67,13 @@ def list_tasks(
     status_filter: str | None = Query(default=None, alias="status"),
     assignee_id: int | None = None,
     q: str | None = None,
-    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[TaskOut]:
-    project, _ = require_project_access(project_id, user, db)
+    project = get_project_or_404(db, project_id)
     query = (
         db.query(Task)
         .options(
             joinedload(Task.assignee),
-            joinedload(Task.reporter),
             joinedload(Task.labels),
             joinedload(Task.comments),
         )
@@ -100,12 +96,9 @@ def list_tasks(
     status_code=status.HTTP_201_CREATED,
 )
 def create_task(
-    project_id: int,
-    payload: TaskCreate,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    project_id: int, payload: TaskCreate, db: Session = Depends(get_db)
 ) -> TaskOut:
-    project, _ = require_project_access(project_id, user, db, min_role=MemberRole.member)
+    project = get_project_or_404(db, project_id)
     next_number = (
         db.query(func.coalesce(func.max(Task.number), 0)).filter(Task.project_id == project_id).scalar()
         + 1
@@ -127,7 +120,6 @@ def create_task(
         due_date=payload.due_date,
         position=max_pos + 1,
         assignee_id=payload.assignee_id,
-        reporter_id=user.id,
     )
     if payload.label_ids:
         labels = (
@@ -141,7 +133,7 @@ def create_task(
     _log(
         db,
         project_id,
-        user.id,
+        None,
         "created",
         "task",
         task.id,
@@ -154,29 +146,18 @@ def create_task(
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut)
-def get_task(
-    task_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> TaskOut:
+def get_task(task_id: int, db: Session = Depends(get_db)) -> TaskOut:
     task = _load_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    require_project_access(task.project_id, user, db)
     return _serialize_task(task)
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskOut)
-def update_task(
-    task_id: int,
-    payload: TaskUpdate,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> TaskOut:
+def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)) -> TaskOut:
     task = _load_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    require_project_access(task.project_id, user, db, min_role=MemberRole.member)
     data = payload.model_dump(exclude_unset=True)
     label_ids = data.pop("label_ids", None)
     for key, value in data.items():
@@ -191,7 +172,7 @@ def update_task(
     _log(
         db,
         task.project_id,
-        user.id,
+        None,
         "updated",
         "task",
         task.id,
@@ -205,23 +186,17 @@ def update_task(
 
 
 @router.post("/tasks/{task_id}/move", response_model=TaskOut)
-def move_task(
-    task_id: int,
-    payload: TaskMove,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> TaskOut:
+def move_task(task_id: int, payload: TaskMove, db: Session = Depends(get_db)) -> TaskOut:
     task = _load_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    require_project_access(task.project_id, user, db, min_role=MemberRole.member)
     old_status = task.status
     task.status = payload.status
     task.position = payload.position
     _log(
         db,
         task.project_id,
-        user.id,
+        None,
         "moved",
         "task",
         task.id,
@@ -235,36 +210,25 @@ def move_task(
 
 
 @router.delete("/tasks/{task_id}", response_model=MessageOut)
-def delete_task(
-    task_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> MessageOut:
+def delete_task(task_id: int, db: Session = Depends(get_db)) -> MessageOut:
     task = _load_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    require_project_access(task.project_id, user, db, min_role=MemberRole.member)
     project_id = task.project_id
     key = f"{task.project.key}-{task.number}"
     db.delete(task)
-    _log(db, project_id, user.id, "deleted", "task", task_id, f"Deleted {key}")
+    _log(db, project_id, None, "deleted", "task", task_id, f"Deleted {key}")
     db.commit()
     return MessageOut(detail="Task deleted")
 
 
 @router.get("/tasks/{task_id}/comments", response_model=list[CommentOut])
-def list_comments(
-    task_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> list[Comment]:
+def list_comments(task_id: int, db: Session = Depends(get_db)) -> list[Comment]:
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    require_project_access(task.project_id, user, db)
     return (
         db.query(Comment)
-        .options(joinedload(Comment.author))
         .filter(Comment.task_id == task_id)
         .order_by(Comment.created_at.asc())
         .all()
@@ -277,21 +241,21 @@ def list_comments(
     status_code=status.HTTP_201_CREATED,
 )
 def add_comment(
-    task_id: int,
-    payload: CommentCreate,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    task_id: int, payload: CommentCreate, db: Session = Depends(get_db)
 ) -> Comment:
     task = _load_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    require_project_access(task.project_id, user, db, min_role=MemberRole.member)
-    comment = Comment(task_id=task_id, author_id=user.id, body=payload.body.strip())
+    comment = Comment(
+        task_id=task_id,
+        author_name=payload.author_name.strip(),
+        body=payload.body.strip(),
+    )
     db.add(comment)
     _log(
         db,
         task.project_id,
-        user.id,
+        payload.author_name,
         "commented",
         "task",
         task.id,
@@ -299,6 +263,4 @@ def add_comment(
     )
     db.commit()
     db.refresh(comment)
-    return (
-        db.query(Comment).options(joinedload(Comment.author)).filter(Comment.id == comment.id).one()
-    )
+    return comment
