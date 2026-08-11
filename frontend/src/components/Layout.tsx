@@ -1,74 +1,40 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { Avatar } from './ui'
+import { NavLink, Outlet } from 'react-router-dom'
+
+const navClass = ({ isActive }: { isActive: boolean }) =>
+  `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+    isActive ? 'bg-teal-50 text-teal-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+  }`
 
 export function AppLayout() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand" onClick={() => navigate('/')} role="button" tabIndex={0}>
-          <span className="brand-mark" aria-hidden />
-          <div>
-            <strong>Atlas</strong>
-            <span>Project Management</span>
+    <div className="flex min-h-screen">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-5 py-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 text-lg font-bold text-white">
+              P
+            </span>
+            <div>
+              <p className="font-semibold text-slate-900">Planboard</p>
+              <p className="text-xs text-slate-500">Project Management</p>
+            </div>
           </div>
         </div>
-        <nav className="side-nav">
-          <NavLink to="/" end>
+        <nav className="flex-1 space-y-1 p-4">
+          <NavLink to="/" end className={navClass}>
             Dashboard
           </NavLink>
-          <NavLink to="/projects">Projects</NavLink>
+          <NavLink to="/projects" className={navClass}>
+            Projects
+          </NavLink>
         </nav>
-        <div className="sidebar-footer">
-          {user && (
-            <div className="user-chip">
-              <Avatar user={user} size={36} />
-              <div>
-                <strong>{user.full_name}</strong>
-                <span>{user.job_title || user.email}</span>
-              </div>
-            </div>
-          )}
-          <button
-            type="button"
-            className="btn btn-ghost btn-block"
-            onClick={() => {
-              logout()
-              navigate('/login')
-            }}
-          >
-            Sign out
-          </button>
+        <div className="border-t border-slate-200 p-4 text-xs text-slate-400">
+          No login required — open access workspace
         </div>
       </aside>
-      <main className="main">
+      <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
-    </div>
-  )
-}
-
-export function AuthLayout() {
-  return (
-    <div className="auth-shell">
-      <div className="auth-panel">
-        <div className="brand brand-lg">
-          <span className="brand-mark" aria-hidden />
-          <div>
-            <strong>Atlas</strong>
-            <span>Ship work with clarity</span>
-          </div>
-        </div>
-        <Outlet />
-      </div>
-      <div className="auth-visual" aria-hidden>
-        <div className="auth-orb auth-orb-a" />
-        <div className="auth-orb auth-orb-b" />
-        <p>Plan projects. Move tasks. Keep delivery honest.</p>
-      </div>
     </div>
   )
 }

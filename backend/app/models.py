@@ -35,13 +35,6 @@ class ProjectPriority(str, enum.Enum):
     critical = "critical"
 
 
-class MemberRole(str, enum.Enum):
-    owner = "owner"
-    admin = "admin"
-    member = "member"
-    viewer = "viewer"
-
-
 class TaskStatus(str, enum.Enum):
     backlog = "backlog"
     todo = "todo"
@@ -73,26 +66,20 @@ class TimestampMixin:
     )
 
 
-class User(Base, TimestampMixin):
-    __tablename__ = "users"
+class TeamMember(Base, TimestampMixin):
+    """Assignable team member — no authentication."""
+
+    __tablename__ = "team_members"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     avatar_color: Mapped[str] = mapped_column(String(7), default="#0D9488")
     job_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    owned_projects: Mapped[list[Project]] = relationship(back_populates="owner")
-    memberships: Mapped[list[ProjectMember]] = relationship(back_populates="user")
     assigned_tasks: Mapped[list[Task]] = relationship(
         back_populates="assignee", foreign_keys="Task.assignee_id"
     )
-    reported_tasks: Mapped[list[Task]] = relationship(
-        back_populates="reporter", foreign_keys="Task.reporter_id"
-    )
-    comments: Mapped[list[Comment]] = relationship(back_populates="author")
 
 
 class Project(Base, TimestampMixin):
@@ -110,32 +97,13 @@ class Project(Base, TimestampMixin):
     )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    budget: Mapped[int | None] = mapped_column(Integer, nullable=True)  # cents
-    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    owner: Mapped[User] = relationship(back_populates="owned_projects")
-    members: Mapped[list[ProjectMember]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
-    )
     tasks: Mapped[list[Task]] = relationship(back_populates="project", cascade="all, delete-orphan")
     labels: Mapped[list[Label]] = relationship(back_populates="project", cascade="all, delete-orphan")
     activities: Mapped[list[Activity]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-
-
-class ProjectMember(Base, TimestampMixin):
-    __tablename__ = "project_members"
-    __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_project_user"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    role: Mapped[MemberRole] = mapped_column(Enum(MemberRole), default=MemberRole.member)
-
-    project: Mapped[Project] = relationship(back_populates="members")
-    user: Mapped[User] = relationship(back_populates="memberships")
 
 
 class Label(Base, TimestampMixin):
@@ -148,9 +116,7 @@ class Label(Base, TimestampMixin):
     color: Mapped[str] = mapped_column(String(7), default="#64748B")
 
     project: Mapped[Project] = relationship(back_populates="labels")
-    tasks: Mapped[list[Task]] = relationship(
-        secondary="task_labels", back_populates="labels"
-    )
+    tasks: Mapped[list[Task]] = relationship(secondary="task_labels", back_populates="labels")
 
 
 class TaskLabel(Base):
@@ -165,7 +131,7 @@ class Task(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
-    number: Mapped[int] = mapped_column(Integer, nullable=False)  # project-scoped issue number
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.todo, index=True)
@@ -174,17 +140,13 @@ class Task(Base, TimestampMixin):
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
-    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("team_members.id"), nullable=True)
 
     project: Mapped[Project] = relationship(back_populates="tasks")
-    assignee: Mapped[User | None] = relationship(
+    assignee: Mapped[TeamMember | None] = relationship(
         back_populates="assigned_tasks", foreign_keys=[assignee_id]
     )
-    reporter: Mapped[User] = relationship(back_populates="reported_tasks", foreign_keys=[reporter_id])
-    labels: Mapped[list[Label]] = relationship(
-        secondary="task_labels", back_populates="tasks"
-    )
+    labels: Mapped[list[Label]] = relationship(secondary="task_labels", back_populates="tasks")
     comments: Mapped[list[Comment]] = relationship(
         back_populates="task", cascade="all, delete-orphan", order_by="Comment.created_at"
     )
@@ -195,11 +157,10 @@ class Comment(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    author_name: Mapped[str] = mapped_column(String(120), default="Anonymous")
     body: Mapped[str] = mapped_column(Text, nullable=False)
 
     task: Mapped[Task] = relationship(back_populates="comments")
-    author: Mapped[User] = relationship(back_populates="comments")
 
 
 class Activity(Base):
@@ -207,7 +168,7 @@ class Activity(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
-    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    actor_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
     entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -215,4 +176,3 @@ class Activity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project: Mapped[Project] = relationship(back_populates="activities")
-    actor: Mapped[User | None] = relationship()

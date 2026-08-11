@@ -2,13 +2,16 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import {
+  Alert,
+  Badge,
   EmptyState,
   Modal,
-  StatusBadge,
+  PageLoader,
+  btnPrimary,
+  btnSecondary,
   formatBudget,
   formatDate,
-  priorityKind,
-  statusKind,
+  inputClass,
 } from '../components/ui'
 import type { Project, ProjectPriority, ProjectStatus } from '../types'
 
@@ -37,20 +40,24 @@ export function ProjectsPage() {
   }, [statusFilter])
 
   return (
-    <div className="page">
-      <header className="page-header">
+    <div className="p-8">
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">Portfolio</p>
-          <h1>Projects</h1>
-          <p className="lede">Production project records with status, priority, budget, and delivery dates.</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-teal-600">Portfolio</p>
+          <h1 className="mt-1 text-3xl font-bold text-slate-900">Projects</h1>
+          <p className="mt-2 text-slate-600">Manage projects, tasks, and delivery timelines.</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
+        <button type="button" className={btnPrimary} onClick={() => setOpen(true)}>
           New project
         </button>
       </header>
 
-      <div className="toolbar">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+      <div className="mb-6">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
           <option value="">All statuses</option>
           <option value="planning">Planning</option>
           <option value="active">Active</option>
@@ -60,27 +67,40 @@ export function ProjectsPage() {
         </select>
       </div>
 
-      {error && <div className="alert">{error}</div>}
+      {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {loading ? (
-        <div className="page-loading">Loading projects…</div>
+        <PageLoader label="Loading projects…" />
       ) : projects.length === 0 ? (
-        <EmptyState title="No projects" body="Create a project to organize tasks, members, and delivery." />
+        <EmptyState title="No projects" body="Create a project to organize your work." />
       ) : (
-        <div className="project-grid">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((p) => (
-            <Link key={p.id} to={`/projects/${p.id}`} className="project-card">
-              <div className="project-card-top">
-                <span className="project-key">{p.key}</span>
-                <StatusBadge value={p.priority} kind={priorityKind(p.priority)} />
+            <Link
+              key={p.id}
+              to={`/projects/${p.id}`}
+              className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <span className="rounded-lg bg-teal-100 px-2.5 py-1 text-sm font-bold text-teal-800">
+                  {p.key}
+                </span>
+                <Badge value={p.priority} />
               </div>
-              <h3>{p.name}</h3>
-              <p>{p.description || 'No description'}</p>
-              <div className="progress">
-                <div style={{ width: `${p.stats?.completion_percent ?? 0}%` }} />
+              <h3 className="font-semibold text-slate-900 group-hover:text-teal-700">{p.name}</h3>
+              <p className="mt-2 line-clamp-2 text-sm text-slate-500">
+                {p.description || 'No description'}
+              </p>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-teal-500 transition-all"
+                  style={{ width: `${p.stats?.completion_percent ?? 0}%` }}
+                />
               </div>
-              <div className="project-card-meta">
-                <StatusBadge value={p.status} kind={statusKind(p.status)} />
-                <span>{p.stats?.done_tasks ?? 0}/{p.stats?.total_tasks ?? 0} done</span>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <Badge value={p.status} />
+                <span>
+                  {p.stats?.done_tasks ?? 0}/{p.stats?.total_tasks ?? 0} done
+                </span>
                 <span>Due {formatDate(p.target_date)}</span>
                 <span>{formatBudget(p.budget)}</span>
               </div>
@@ -149,15 +169,16 @@ function CreateProjectModal({
 
   return (
     <Modal open={open} title="New project" onClose={onClose} wide>
-      <form className="form-grid" onSubmit={onSubmit}>
-        {error && <div className="alert">{error}</div>}
-        <label>
+      <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
+        {error && <div className="sm:col-span-2"><Alert>{error}</Alert></div>}
+        <label className="text-sm font-medium text-slate-700">
           Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
         </label>
-        <label>
+        <label className="text-sm font-medium text-slate-700">
           Key
           <input
+            className={inputClass}
             value={key}
             onChange={(e) => setKey(e.target.value.toUpperCase())}
             required
@@ -167,52 +188,43 @@ function CreateProjectModal({
             placeholder="e.g. CPR"
           />
         </label>
-        <label className="full">
+        <label className="text-sm font-medium text-slate-700 sm:col-span-2">
           Description
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+          <textarea className={inputClass} value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </label>
-        <label>
+        <label className="text-sm font-medium text-slate-700">
           Status
-          <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)}>
+          <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)}>
             <option value="planning">Planning</option>
             <option value="active">Active</option>
             <option value="on_hold">On hold</option>
             <option value="completed">Completed</option>
           </select>
         </label>
-        <label>
+        <label className="text-sm font-medium text-slate-700">
           Priority
-          <select value={priority} onChange={(e) => setPriority(e.target.value as ProjectPriority)}>
+          <select className={inputClass} value={priority} onChange={(e) => setPriority(e.target.value as ProjectPriority)}>
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
             <option value="critical">Critical</option>
           </select>
         </label>
-        <label>
+        <label className="text-sm font-medium text-slate-700">
           Start date
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" className={inputClass} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </label>
-        <label>
+        <label className="text-sm font-medium text-slate-700">
           Target date
-          <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+          <input type="date" className={inputClass} value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
         </label>
-        <label>
+        <label className="text-sm font-medium text-slate-700 sm:col-span-2">
           Budget (USD)
-          <input
-            type="number"
-            min={0}
-            step={1000}
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="250000"
-          />
+          <input type="number" min={0} step={1000} className={inputClass} value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="250000" />
         </label>
-        <div className="form-actions full">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
+        <div className="flex justify-end gap-3 sm:col-span-2">
+          <button type="button" className={btnSecondary} onClick={onClose}>Cancel</button>
+          <button type="submit" className={btnPrimary} disabled={busy}>
             {busy ? 'Creating…' : 'Create project'}
           </button>
         </div>

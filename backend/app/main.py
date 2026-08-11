@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, dashboard, projects, tasks
+from app.api import dashboard, projects, tasks
+from app.api.projects import members_router
 from app.core.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.seed import seed_if_empty
@@ -39,8 +40,8 @@ app.add_middleware(
 )
 
 prefix = settings.api_prefix
-app.include_router(auth.router, prefix=prefix)
 app.include_router(projects.router, prefix=prefix)
+app.include_router(members_router, prefix=prefix)
 app.include_router(tasks.router, prefix=prefix)
 app.include_router(dashboard.router, prefix=prefix)
 
