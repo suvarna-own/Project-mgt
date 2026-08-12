@@ -13,6 +13,7 @@ export function DashboardPage() {
     let alive = true
     ;(async () => {
       try {
+        debugger
         const d = await api.dashboard()
         if (alive) setData(d)
       } catch (err) {
